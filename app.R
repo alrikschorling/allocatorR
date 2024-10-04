@@ -50,8 +50,8 @@ get_subsampled_palette <- function(n) {
 #generate example data that matches the format users should upload
 example_table <- data.frame(
   rat_id = c("1", "2", "3"),
-  behavioral_test1 = c(250, 245, 260),
-  behavioral_test2 = c(248, 244, 258)
+  test1 = c(250, 245, 260),
+  test2 = c(248, 244, 258)
 )
 
 
@@ -89,11 +89,15 @@ ui <- fluidPage(
                            "The allocation aims to minimize the variance and standard deviation between groups",
                            "using the anticlust package with the following parameters: <br>",
                            
-                           "  -objective = kplus <br>",
-                           "  -standardize = TRUE <br>",
-                           "  -method = local-maximum <br><br>",
+                           "-objective = kplus <br>",
+                           "-standardize = TRUE <br>",
+                           "-method = local-maximum <br><br>",
+                           
+                           "The app will perform normality and homoskedacity tests, and the results from these will",
+                           "determine downstream descriptive statistical tests. <br><br>",
                            
                            "Example table:<br>")),
+             
              tableOutput("exampleTable"),
              
              #output number of rats (to simplify for group size determination)
