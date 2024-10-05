@@ -58,7 +58,7 @@ example_table <- data.frame(
 
 # UI
 ui <- fluidPage(
-  theme = shinytheme("flatly"),
+  theme = shinytheme("yeti"),
   tags$head(
     tags$style(HTML("
       .btn-spacing {
@@ -67,6 +67,15 @@ ui <- fluidPage(
       .container-fluid {
         max-width: 1600px;  /* Set maximum width for the window */
       }
+      .progress {
+      width: 100% !important;  /* Make the progress bar 100% width */
+      height: 30px !important;  /* Adjust the height of the progress bar */
+    }
+    .progress-bar {
+      font-size: 14px !important;  /* Increase the font size */
+      line-height: 30px !important;  /* Match the line height to the bar height to center text */
+      text-align: center !important;  /* Ensure the text is centered horizontally */
+    }
     "))
   ),
   useShinyFeedback(),
@@ -74,56 +83,67 @@ ui <- fluidPage(
   
   titlePanel("allocatoR - animal group allocator"),
   
-  fluidRow(
-    column(4,
-           div(
+  fluidRow(column(4, div(
+    #user input csv files 
+    fileInput("file1", "Choose CSV file", 
+              accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv")),
+
+    #help text
+    helpText(HTML("<p><strong>Please upload a CSV file with the following specifications:</strong></p>",
+                  
+                  "<ul>",
+                  "<li>The first column must be 'rat_id', given as a number (see example below).</li>",
+                  "<li>The file should use <strong>DOTS</strong> as decimal separators (e.g., 0.5, not 0,5).</li>",
+                  "<li>The file should use <strong>COMMAS</strong> as cell separators.</li>",
+                  "</ul>",
+                  
+                  "<p>If not, the following error message will appear:</p>",
+                  "<p><code>Error in read.table(file = file, header = header, sep = sep, quote = quote, :<br>
+  more columns than column names</code></p>",
+                  
+                  "<p><strong>Remaining columns:</strong> should contain the behavioral data (see below).</p>",
+                  
+                  "<p><strong>Allocation Method:</strong></p>",
+                  "<ul>",
+                  "<li>The allocation aims to minimize the variance and standard deviation between groups.</li>",
+                  "<li>It uses the <code>anticlust</code> package with the following parameters:</li>",
+                  "<ul>",
+                  "<li><code>objective = kplus</code></li>",
+                  "<li><code>standardize = TRUE</code></li>",
+                  "<li><code>method = local-maximum</code></li>",
+                  "</ul>",
+                  "</ul>",
+                  
+                  "<p><strong>Statistical Tests:</strong> The app will perform normality and homoskedasticity tests, which will determine the downstream descriptive statistical test used.</p>",
+                  
+                  "<p><strong>Example Table:</strong></p>")),
+    
+    tableOutput("exampleTable"),
+    
+    #output number of rats (to simplify for group size determination)
+    verbatimTextOutput("num_rats"),  # Display unique number of rat_id
              
-             #user input csv files 
-             fileInput("file1", "Choose CSV file", 
-                       accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv")),
-             
-             #help text
-             helpText(HTML("Please upload a CSV file with the first column being 'rat_id' given as a number (see below).",
-                           "The remaining columns should contain the behavioral data (see below).<br><br>",
-                           
-                           "The allocation aims to minimize the variance and standard deviation between groups",
-                           "using the anticlust package with the following parameters: <br>",
-                           
-                           "-objective = kplus <br>",
-                           "-standardize = TRUE <br>",
-                           "-method = local-maximum <br><br>",
-                           
-                           "The app will perform normality and homoskedacity tests, and the results from these will",
-                           "determine downstream descriptive statistical tests. <br><br>",
-                           
-                           "Example table:<br>")),
-             
-             tableOutput("exampleTable"),
-             
-             #output number of rats (to simplify for group size determination)
-             verbatimTextOutput("num_rats"),  # Display unique number of rat_id
-             
-             #user input
-             numericInput("num_groups", "Number of groups for anticlustering", 2),
-             textInput("group_names_allocation", "Group names (comma-separated)", 
-                       placeholder = "Eg. Lesion, Control"),  # Comma-separated input
-             textInput("group_sizes", "Number of rats in each group (comma-separated)", 
-                       placeholder = "E.g. 5,5"),  # Comma-separated input for sizes
-             selectInput("set_seed", "Set seed (for reproducibility)", 
-                         choices = c(123, 69, 111), selected = 123),
-             
-             #action buttons
-             actionButton("process_data", "Process Data"),
-             downloadButton("downloadData1", "Download Fig. 1", class = "btn-spacing"),  
-             downloadButton("downloadData2", "Download Fig. 2", class = "btn-spacing"),
-             downloadButton("downloadData3", "Download Fig. 3", class = "btn-spacing"),
-             downloadButton("downloadAllocation", "Download allocation")
-           )
+    #user input
+    numericInput("num_groups", "Number of groups for anticlustering", 2),
+    textInput("group_names_allocation", "Group names (comma-separated)", 
+              placeholder = "Eg. Lesion, Control"),  # Comma-separated input
+    textInput("group_sizes", "Number of rats in each group (comma-separated)", 
+              placeholder = "E.g. 5,5"),  # Comma-separated input for sizes
+    selectInput("set_seed", "Set seed (for reproducibility)", 
+                choices = c(123, 69, 111), selected = 123),
+    
+    #action buttons
+    actionButton("process_data", "Process Data", class = "btn-primary"),
+    downloadButton("downloadData1", "Download Fig. 1", class = "btn-spacing"),  
+    downloadButton("downloadData2", "Download Fig. 2", class = "btn-spacing"),
+    downloadButton("downloadData3", "Download Fig. 3", class = "btn-spacing"),
+    downloadButton("downloadAllocation", "Download allocation", class = "btn-spacing"))
     ),
     
     column(8,
-           verbatimTextOutput("shapiro_result"),  # Shapiro-Wilk test result
-           verbatimTextOutput("levene_result"),  # Levene's test result
+           verbatimTextOutput("shapiro_result"), #shapiro-wilk test result
+           verbatimTextOutput("levene_result"), #levene's test result
+           verbatimTextOutput("testUsed"),  #output the statistial test used
            plotOutput("plot1"),
            plotOutput("plot2"),
            plotOutput("plot3"),
@@ -177,7 +197,7 @@ server <- function(input, output, session) {
       need(sum(group_sizes) == nrow(df()), "The total size of all groups doesn't match the number of animals.")
     )
     
-    
+    #create a new dataframe to store the group allocation
     df_with_groups <- df()
     
     #perform anticlustering
@@ -200,9 +220,9 @@ server <- function(input, output, session) {
   })
   
   # perform statistical tests
+  #shapiro-wilk test
   shapiro <- reactive({
     result <- shapiro_test(df_long()$vals)
-    result
   })
   
   output$shapiro_result <- renderText({
@@ -211,11 +231,11 @@ server <- function(input, output, session) {
     paste(
       "Shapiro-Wilk Test for Normality\n",
       "Statistic:", round(shapiro_result$statistic, 3), "\n",
-      "p-value:", ifelse(!is.null(shapiro_result$p.value), round(shapiro_result$p.value, 3), "NA")
+      "p-value:", ifelse(!is.null(shapiro_result$p.value), round(shapiro_result$p.value, 6), "NA")
     )
   })
   
-  
+  #levene's test
   levene <- reactive({
     levene_test(vals ~ group, data = df_long())
   })
@@ -231,6 +251,9 @@ server <- function(input, output, session) {
     )
   })
   
+  
+  test_used <- reactiveVal("")
+  
   #conditional statistics
   sts <- reactive({
     
@@ -238,40 +261,44 @@ server <- function(input, output, session) {
     if (!is.null(shapiro()$p.value) && !is.null(levene()$p) &&
         shapiro()$p.value < 0.05 && levene()$p < 0.05 && 
         length(unique(df_long()$group)) > 2) {
+      test_used("Dunn's non-parametric, multiple comparison test")
       df_long() |> group_by(test) |>
         dunn_test(vals ~ group, p.adjust.method = "BH") |>
-        add_xy_position() 
-      #print('Using Dunns non-parametric, multiple comparison test')
+        add_xy_position()
       
       #case when non-normal heteroskedastic data (p < 0.05 for both test) and 2 groups
     } else if (!is.null(shapiro()$p.value) && !is.null(levene()$p) &&
                shapiro()$p.value < 0.05 && levene()$p < 0.05 && 
                length(unique(df_long()$group)) == 2) {
+      test_used("Wilcoxon non-parametric test")
       df_long() |> group_by(test) |>
         wilcox_test(vals ~ group, paired = FALSE) |>
         add_xy_position()
-      #print('Using Wilcoxon (signed rank) non-parametric test')
       
       #case when normal but heteroskedastic data (levene()$p < 0.05)
     } else if (!is.null(levene()$p) && levene()$p < 0.05) {
+      test_used("Two-sided t-test with unequal variance")
       df_long() |> group_by(test) |>
         t_test(vals ~ group, var.equal = FALSE) |>
         add_xy_position()
-      #print('Using two-sided t-test with unequal variance')
       
       #case when normal and homoskedastic data (p > 0.05 for both test)
     } else {
-      #res <- df_long() |> group_by(test) |> t_test(vals ~ group) |> add_xy_position()
-      #print(res)  # Check the structure of res
-      #return(res)
-      
+      test_used("Two-sided t-test with equal variance")
       df_long() |> group_by(test) |>
         t_test(vals ~ group) |>
         add_xy_position()
-      #print('Using two-sided t-test with equal variance')
     }
   })
   
+  output$testUsed <- renderText({
+    paste("Statistical test used:", test_used())
+  })
+  
+  
+  shinyjs::enable("downloadData1")
+  shinyjs::enable("downloadData2")
+  shinyjs::enable("downloadData3")
   
   #plot 1
   reactivePlot1 <- reactive({
@@ -287,7 +314,6 @@ server <- function(input, output, session) {
     print(reactivePlot1())
   })
   
-  shinyjs::enable("downloadData1")
   
   #plot2
   reactivePlot2 <- reactive({
@@ -322,8 +348,7 @@ server <- function(input, output, session) {
   output$plot2 <- renderPlot({
     print(reactivePlot2())
   })
-  
-  shinyjs::enable("downloadData2")
+
   
   
   #plot3
@@ -341,7 +366,6 @@ server <- function(input, output, session) {
     print(reactivePlot3())
   })
   
-  shinyjs::enable("downloadData3")
   
   #display group allocation table
   output$allocation_table <- renderDT({
@@ -407,8 +431,8 @@ server <- function(input, output, session) {
       g <- ggplot_build(p3)
       
       # Dynamically adjust the plot size
-      plot_width <- length(unique(d_long$test)) * 1.5
-      plot_height <- length(unique(d_long$test)) * 1.5
+      plot_width <- length(unique(df_long()$test)) * 1.5
+      plot_height <- length(unique(df_long()$test)) * 1.5
       
       pdf(file, width = plot_width, height = plot_height)
       print(p3)
